@@ -330,7 +330,9 @@ export default function HandCricketGame() {
     if (playerName && roomId && ably?.connection.id) {
       console.log('Publishing join-room mess...');
   
-      const connectionId = ably.connection.id;
+      const connectionId = playerName;
+
+      console.log('Player ID:', connectionId);
   
       // ✅ Prevent duplicate join by same connection
       const alreadyJoined = players.some(player => player.id === connectionId);
@@ -708,24 +710,7 @@ const resetGame = () => {
                 <Input
   placeholder="Enter your name"
   value={playerName}
-  onChange={(e) => {
-    const name = e.target.value;
-    setPlayerName(name);
-
-    const playerId = ably?.connection.id as string;
-
-    // Check if player already exists in the list
-    const exists = players.some((p) => p.id === playerId);
-    
-    if (!exists && name.trim() !== '') {
-      const newPlayer = {
-        id: playerId,
-        name,
-        number: players.length + 1, // auto-assign number
-      };
-      setPlayers([...players, newPlayer]);
-    }
-  }}
+  onChange={(e) => setPlayerName(e.target.value)}
   className="border-2 border-gray-200 focus:border-blue-500"
 />
 
@@ -739,13 +724,29 @@ const resetGame = () => {
                   className="border-2 border-gray-200 focus:border-blue-500"
                 />
               </div>
-              <Button 
-                onClick={joinRoom} 
-                disabled={!connected || !playerName || !roomId}
-                className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-lg py-3"
-              >
-                Join Game
-              </Button>
+              <Button
+  onClick={() => {
+    console.log(playerName,"playerName");
+    const playerId = playerName;
+    const name = playerName.trim();
+
+    if (!name) return;
+
+    const alreadyExists = players.some(p => p.id === playerId);
+
+    if (!alreadyExists) {
+      const newPlayer = {
+        id: playerId,
+        name,
+        number: players.length + 1,
+      };
+      setPlayers([...players, newPlayer]);
+    }
+    joinRoom();
+  }}
+>
+  Join Room
+</Button>
               <div className="text-xs text-gray-500 text-center">
                 Share the same Room ID with your friend to play together
               </div>
