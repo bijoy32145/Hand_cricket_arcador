@@ -96,6 +96,7 @@ export default function HandCricketGame() {
     // Room Update
     channel.subscribe('room-update', (message) => {
       const data = message.data;
+      console.log('Received room-update message:', data);
       setPlayers(data.players);
       setGameState(data.gameState);
   
@@ -107,6 +108,7 @@ export default function HandCricketGame() {
   
     // Game Start
     channel.subscribe('game-start', (message) => {
+      console.log('Received game-start message:', message.data);
       setGameState(message.data);
     });
   
@@ -143,6 +145,8 @@ export default function HandCricketGame() {
   
     // Player Disconnected
     channel.subscribe('player-disconnected', (message) => {
+ 
+      setPlayers(message.data.players);
       setPlayers(message.data.players);
       setGameState(message.data.gameState);
     });
@@ -306,12 +310,76 @@ export default function HandCricketGame() {
 
   const channel = ably?.channels.get('game-room');
 
-
-const joinRoom = () => {
-  if (playerName && roomId) {
-    channel?.publish('join-room', { roomId, playerName });
-  }
-};
+  useEffect(() => {
+    if (!channel) return;
+  
+    const onRoomUpdate = (message: any) => {
+      const { players: updatedPlayers, gameState: updatedState } = message.data;
+      setPlayers(updatedPlayers);
+      setGameState(updatedState);
+    };
+  
+    channel.subscribe('room-update', onRoomUpdate);
+  
+    return () => {
+      channel.unsubscribe('room-update', onRoomUpdate);
+    };
+  }, [channel]);
+  
+  const joinRoom = () => {
+    if (playerName && roomId && ably?.connection.id) {
+      console.log('Publishing join-room mess...');
+  
+      const connectionId = ably.connection.id;
+  
+      // ✅ Prevent duplicate join by same connection
+      const alreadyJoined = players.some(player => player.id === connectionId);
+      if (alreadyJoined) {
+        console.log('Player already in room. Skipping join.');
+        return;
+      }
+  
+      const updatedPlayers = [
+        ...players,
+        {
+          id: connectionId,
+          name: playerName,
+          number: players.length + 1,
+        },
+      ];
+  
+      console.log('...', updatedPlayers);
+  
+      const updatedGameState: GameState = {
+        ...gameState,
+        phase: updatedPlayers.length === 2 ? 'toss' : 'waiting',
+      };
+  
+      console.log('Publishing room-upda.', updatedGameState);
+  
+      channel?.publish('room-update', {
+        roomId,
+        players: updatedPlayers,
+        gameState: updatedGameState,
+      });
+  
+      setPlayers(updatedPlayers);
+      setGameState(updatedGameState);
+  
+      console.log('Publ to channel:', updatedPlayers);
+  
+      if (updatedPlayers.length === 2) {
+        channel?.publish('game-start', {
+          roomId,
+          players: updatedPlayers,
+          gameState: updatedGameState,
+        });
+      }
+    }
+  };
+  
+  
+  
 
 const handleToss = (choice: 'heads' | 'tails') => {
   channel?.publish('toss-choice', { choice });
@@ -343,15 +411,15 @@ const resetGame = () => {
     if (gameMode === 'single') {
       return !aiThinking;
     }
-    if (gameState.waitingFor === 'batsman' && myPlayerNumber === gameState.currentBatsman) return true;
-    if (gameState.waitingFor === 'bowler' && myPlayerNumber === gameState.currentBowler) return true;
+    if (gameState?.waitingFor === 'batsman' && myPlayerNumber === gameState?.currentBatsman) return true;
+    if (gameState?.waitingFor === 'bowler' && myPlayerNumber === gameState?.currentBowler) return true;
     return false;
   };
 
   const getMyRole = () => {
     const currentGame = gameMode === 'single' ? singlePlayerGame : gameState;
-    if (myPlayerNumber === currentGame.currentBatsman) return 'batting';
-    if (myPlayerNumber === currentGame.currentBowler) return 'bowling';
+    if (myPlayerNumber === currentGame?.currentBatsman) return 'batting';
+    if (myPlayerNumber === currentGame?.currentBowler) return 'bowling';
     return 'spectating';
   };
 
@@ -421,7 +489,8 @@ const resetGame = () => {
                 <Input
                   placeholder="Enter your name"
                   value={playerName}
-                  onChange={(e) => setPlayerName(e.target.value)}
+                  onChange={(e) => {setPlayerName(e.target.value)
+                  }}
                   className="border-2 border-gray-200 focus:border-blue-500"
                 />
               </div>
@@ -609,7 +678,7 @@ const resetGame = () => {
   // Multiplayer Mode (existing code)
   if (gameMode === 'multiplayer') {
     // Setup Phase
-    if (gameState.phase === 'setup') {
+    if (gameState?.phase === 'setup') {
       return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md mx-auto bg-white/90 backdrop-blur-sm shadow-2xl border-0">
@@ -637,11 +706,29 @@ const resetGame = () => {
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">Your Name</label>
                 <Input
-                  placeholder="Enter your name"
-                  value={playerName}
-                  onChange={(e) => setPlayerName(e.target.value)}
-                  className="border-2 border-gray-200 focus:border-blue-500"
-                />
+  placeholder="Enter your name"
+  value={playerName}
+  onChange={(e) => {
+    const name = e.target.value;
+    setPlayerName(name);
+
+    const playerId = ably?.connection.id as string;
+
+    // Check if player already exists in the list
+    const exists = players.some((p) => p.id === playerId);
+    
+    if (!exists && name.trim() !== '') {
+      const newPlayer = {
+        id: playerId,
+        name,
+        number: players.length + 1, // auto-assign number
+      };
+      setPlayers([...players, newPlayer]);
+    }
+  }}
+  className="border-2 border-gray-200 focus:border-blue-500"
+/>
+
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium text-gray-700">Room ID</label>
@@ -669,7 +756,7 @@ const resetGame = () => {
     }
 
     // Waiting for players
-    if (gameState.phase === 'waiting') {
+    if (gameState?.phase === 'waiting') {
       return (
         <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md mx-auto bg-white/90 backdrop-blur-sm shadow-2xl border-0">
@@ -709,7 +796,7 @@ const resetGame = () => {
     }
 
     // Toss Phase
-    if (gameState.phase === 'toss') {
+    if (gameState?.phase === 'toss') {
       return (
         <div className="min-h-screen bg-gradient-to-br from-green-50 via-blue-50 to-indigo-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md mx-auto bg-white/90 backdrop-blur-sm shadow-2xl border-0">
@@ -774,7 +861,7 @@ const resetGame = () => {
     }
 
     // Result Phase
-    if (gameState.phase === 'result') {
+    if (gameState?.phase === 'result') {
       return (
         <div className="min-h-screen bg-gradient-to-br from-green-50 via-yellow-50 to-orange-50 flex items-center justify-center p-4">
           <Card className="w-full max-w-md mx-auto bg-white/90 backdrop-blur-sm shadow-2xl border-0">
@@ -842,7 +929,7 @@ const resetGame = () => {
               </div>
               <div className="flex items-center justify-center gap-4">
                 <Badge variant="secondary" className="bg-green-600 text-white">
-                  Innings {gameState.innings} of 2
+                  Innings {gameState?.innings} of 2
                 </Badge>
                 <Badge variant="outline" className="border-green-400 text-green-400">
                   Room: {roomId}
@@ -851,49 +938,49 @@ const resetGame = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className={`p-4 rounded-lg transition-all ${gameState.currentBatsman === 1 ? 'bg-green-900 ring-2 ring-green-400' : 'bg-gray-800'}`}>
+                <div className={`p-4 rounded-lg transition-all ${gameState?.currentBatsman === 1 ? 'bg-green-900 ring-2 ring-green-400' : 'bg-gray-800'}`}>
                   <h3 className="text-lg font-bold text-center">
-                    {players.find(p => p.number === 1)?.name || 'Player 1'}
-                    {gameState.currentBatsman === 1 && <span className="ml-2 text-yellow-400">🏏</span>}
+                    {players?.find(p => p.number === 1)?.name || 'Player 1'}
+                    {gameState?.currentBatsman === 1 && <span className="ml-2 text-yellow-400">🏏</span>}
                   </h3>
                   <div className="text-center font-mono text-3xl">
-                    {gameState.player1Stats.score}/{gameState.player1Stats.wickets}
+                    {gameState?.player1Stats.score}/{gameState?.player1Stats.wickets}
                   </div>
                   <div className="text-center text-sm">
-                    {gameState.player1Stats.overs}.{gameState.player1Stats.balls % 6} overs
+                    {gameState?.player1Stats.overs}.{gameState?.player1Stats.balls % 6} overs
                   </div>
                 </div>
-                <div className={`p-4 rounded-lg transition-all ${gameState.currentBatsman === 2 ? 'bg-green-900 ring-2 ring-green-400' : 'bg-gray-800'}`}>
+                <div className={`p-4 rounded-lg transition-all ${gameState?.currentBatsman === 2 ? 'bg-green-900 ring-2 ring-green-400' : 'bg-gray-800'}`}>
                   <h3 className="text-lg font-bold text-center">
-                    {players.find(p => p.number === 2)?.name || 'Player 2'}
-                    {gameState.currentBatsman === 2 && <span className="ml-2 text-yellow-400">🏏</span>}
+                    {players?.find(p => p.number === 2)?.name || 'Player 2'}
+                    {gameState?.currentBatsman === 2 && <span className="ml-2 text-yellow-400">🏏</span>}
                   </h3>
                   <div className="text-center font-mono text-3xl">
-                    {gameState.player2Stats.score}/{gameState.player2Stats.wickets}
+                    {gameState?.player2Stats.score}/{gameState?.player2Stats.wickets}
                   </div>
                   <div className="text-center text-sm">
-                    {gameState.player2Stats.overs}.{gameState.player2Stats.balls % 6} overs
+                    {gameState?.player2Stats.overs}.{gameState?.player2Stats.balls % 6} overs
                   </div>
                 </div>
               </div>
               
-              {gameState.target && (
+              {gameState?.target && (
                 <div className="text-center bg-blue-900 p-3 rounded-lg">
                   <div className="flex items-center justify-center gap-2">
                     <Target className="w-4 h-4" />
-                    <span className="font-bold">Target: {gameState.target}</span>
+                    <span className="font-bold">Target: {gameState?.target}</span>
                   </div>
                   <span className="text-sm">
-                    Need {gameState.target - (gameState.currentBatsman === 1 ? gameState.player1Stats.score : gameState.player2Stats.score)} runs
+                    Need {gameState?.target - (gameState?.currentBatsman === 1 ? gameState?.player1Stats.score : gameState?.player2Stats.score)} runs
                   </span>
                 </div>
               )}
               
-              {gameState.lastResult && (
+              {gameState?.lastResult && (
                 <div className="text-center bg-yellow-900 p-3 rounded-lg">
                   <div className="flex items-center justify-center gap-2">
                     <Clock className="w-4 h-4" />
-                    <span>{gameState.lastResult}</span>
+                    <span>{gameState?.lastResult}</span>
                   </div>
                 </div>
               )}
@@ -912,8 +999,8 @@ const resetGame = () => {
               </CardTitle>
               <p className="text-sm opacity-90">
                 {isMyTurn() ? 'Your turn - choose a number!' : 
-                 gameState.waitingFor === 'batsman' ? 'Waiting for batsman...' : 
-                 gameState.waitingFor === 'bowler' ? 'Waiting for bowler...' : 
+                 gameState?.waitingFor === 'batsman' ? 'Waiting for batsman...' : 
+                 gameState?.waitingFor === 'bowler' ? 'Waiting for bowler...' :
                  'Waiting for next ball...'}
               </p>
             </CardHeader>
