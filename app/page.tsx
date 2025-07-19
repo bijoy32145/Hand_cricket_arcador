@@ -327,14 +327,12 @@ export default function HandCricketGame() {
   }, [channel]);
   
   const joinRoom = () => {
-    if (playerName && roomId && ably?.connection.id) {
-      console.log('Publishing join-room mess...');
+    if (playerName.trim() && roomId && ably?.connection.id) {
+      const connectionId = ably.connection.id;
   
-      const connectionId = playerName;
-
       console.log('Player ID:', connectionId);
   
-      // ✅ Prevent duplicate join by same connection
+      // Check if the player with the same connection ID already exists
       const alreadyJoined = players.some(player => player.id === connectionId);
       if (alreadyJoined) {
         console.log('Player already in room. Skipping join.');
@@ -344,20 +342,16 @@ export default function HandCricketGame() {
       const updatedPlayers = [
         ...players,
         {
-          id: connectionId,
-          name: playerName,
+          id: connectionId,         // uniquely identify the player
+          name: playerName.trim(),  // same name is fine
           number: players.length + 1,
         },
       ];
-  
-      console.log('...', updatedPlayers);
   
       const updatedGameState: GameState = {
         ...gameState,
         phase: updatedPlayers.length === 2 ? 'toss' : 'waiting',
       };
-  
-      console.log('Publishing room-upda.', updatedGameState);
   
       channel?.publish('room-update', {
         roomId,
@@ -368,8 +362,6 @@ export default function HandCricketGame() {
       setPlayers(updatedPlayers);
       setGameState(updatedGameState);
   
-      console.log('Publ to channel:', updatedPlayers);
-  
       if (updatedPlayers.length === 2) {
         channel?.publish('game-start', {
           roomId,
@@ -379,6 +371,7 @@ export default function HandCricketGame() {
       }
     }
   };
+  
   
   
   
