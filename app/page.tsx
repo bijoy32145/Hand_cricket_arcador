@@ -86,97 +86,100 @@ export default function HandCricketGame() {
   // Socket setup for multiplayer
  
   useEffect(() => {
-    if (gameMode === 'multiplayer') {
-      console.log('Connecting to Ably multiplayer game...');
-      const channel = ably.channels.get('game-room');
-
-      // Room Update
-      channel.subscribe('room-update', (message) => {
-        const data = message.data;
-        setPlayers(data.players);
-        setGameState(data.gameState);
-
-        const myPlayer = data.players.find((p: any) => p.id === ably.connection.id);
-        if (myPlayer) {
-          setMyPlayerNumber(myPlayer.number);
-        }
-      });
-
-      // Game Start
-      channel.subscribe('game-start', (message) => {
-        setGameState(message.data);
-      });
-
-      // Toss Result
-      channel.subscribe('toss-result', (message) => {
-        setIsFlipping(true);
-        setTossResult(message.data);
-        setTimeout(() => {
-          setIsFlipping(false);
-          setGameState(message.data.gameState);
-        }, 2000);
-      });
-
-      // Player Choice
-      channel.subscribe('choice-made', (message) => {
+    if (gameMode !== 'multiplayer') return;
+    if (typeof window === 'undefined') return; // ensures we're on client
+    if (!ably) return; // ensure ably is initialized
+  
+    console.log('Connecting to Ably multiplayer game...');
+    const channel = ably.channels.get('game-room');
+  
+    // Room Update
+    channel.subscribe('room-update', (message) => {
+      const data = message.data;
+      setPlayers(data.players);
+      setGameState(data.gameState);
+  
+      const myPlayer = data.players.find((p: any) => p.id === ably?.connection.id);
+      if (myPlayer) {
+        setMyPlayerNumber(myPlayer.number);
+      }
+    });
+  
+    // Game Start
+    channel.subscribe('game-start', (message) => {
+      setGameState(message.data);
+    });
+  
+    // Toss Result
+    channel.subscribe('toss-result', (message) => {
+      setIsFlipping(true);
+      setTossResult(message.data);
+      setTimeout(() => {
+        setIsFlipping(false);
         setGameState(message.data.gameState);
-      });
-
-      // Ball Result
-      channel.subscribe('ball-result', (message) => {
-        setGameState(message.data);
-      });
-
-      // Game Reset
-      channel.subscribe('game-reset', (message) => {
-        setGameState(message.data);
-        setTossResult(null);
-      });
-
-      // Room Full
-      channel.subscribe('room-full', () => {
-        alert('Room is full!');
-      });
-
-      // Player Disconnected
-      channel.subscribe('player-disconnected', (message) => {
-        setPlayers(message.data.players);
-        setGameState(message.data.gameState);
-      });
-
-      // Handle connection status
-      const handleConnectionStatus = () => {
-        console.log('Ably connection state:', ably.connection.state);
-        if (ably.connection.state === 'connected') {
-          console.log('Already connected to Ably with ID:', ably.connection.id);
+      }, 2000);
+    });
+  
+    // Player Choice
+    channel.subscribe('choice-made', (message) => {
+      setGameState(message.data.gameState);
+    });
+  
+    // Ball Result
+    channel.subscribe('ball-result', (message) => {
+      setGameState(message.data);
+    });
+  
+    // Game Reset
+    channel.subscribe('game-reset', (message) => {
+      setGameState(message.data);
+      setTossResult(null);
+    });
+  
+    // Room Full
+    channel.subscribe('room-full', () => {
+      alert('Room is full!');
+    });
+  
+    // Player Disconnected
+    channel.subscribe('player-disconnected', (message) => {
+      setPlayers(message.data.players);
+      setGameState(message.data.gameState);
+    });
+  
+    // Connection Status
+    const handleConnectionStatus = () => {
+      console.log('Ably connection state:', ably!.connection.state);
+      if (ably!.connection.state === 'connected') {
+        console.log('Already connected to Ably with ID:', ably!.connection.id);
+        setConnected(true);
+      } else {
+        ably!.connection.once('connected', () => {
+          console.log('Ably connected (via event)');
           setConnected(true);
-        } else {
-          ably.connection.once('connected', () => {
-            console.log('Ably connected (via event)');
-            setConnected(true);
-            console.log('Connected to Ably with ID:', ably.connection.id);
-          });
-        }
-      };
-
-      handleConnectionStatus();
-
-      ably.connection.on('disconnected', () => {
-        console.log('Ably disconnected');
-        setConnected(false);
-      });
-
-      ably.connection.on((stateChange) => {
-        console.log('Ably connection state changed:', stateChange);
-      });
-
-      return () => {
-        channel.unsubscribe();
-        console.log('Unsubscribed from game-room');
-        ably.close(); // Optional: close connection on component unmount
-      };
-    }
+          console.log('Connected to Ably with ID:', ably!.connection.id);
+        });
+      }
+    };
+  
+    handleConnectionStatus();
+  
+    ably.connection.on('disconnected', () => {
+      console.log('Ably disconnected');
+      setConnected(false);
+    });
+  
+    ably.connection.on((stateChange) => {
+      console.log('Ably connection state changed:', stateChange);
+    });
+  
+    return () => {
+      channel.unsubscribe();
+      console.log('Unsubscribed from game-room');
+      ably!.close(); // Optional: close connection on component unmount
+    };
   }, [gameMode]);
+  
   
 
   // Single Player AI Logic
@@ -301,25 +304,25 @@ export default function HandCricketGame() {
 
   // Multiplayer Functions using Ably
 
-  const channel = ably.channels.get('game-room');
+  const channel = ably?.channels.get('game-room');
 
 
 const joinRoom = () => {
   if (playerName && roomId) {
-    channel.publish('join-room', { roomId, playerName });
+    channel?.publish('join-room', { roomId, playerName });
   }
 };
 
 const handleToss = (choice: 'heads' | 'tails') => {
-  channel.publish('toss-choice', { choice });
+  channel?.publish('toss-choice', { choice });
 };
 
 const handlePlayerChoice = (choice: number) => {
-  channel.publish('player-choice', { choice });
+  channel?.publish('player-choice', { choice });
 };
 
 const resetGame = () => {
-  channel.publish('reset-game', {});
+  channel?.publish('reset-game', {});
 };
 
 
