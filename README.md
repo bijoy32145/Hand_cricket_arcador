@@ -1,4 +1,4 @@
-# ⚡️ Ably Multiplayer Game (Next.js + Ably)
+# ⚡️ Ably Multiplayer Game (Next.js )
 
 This is a simple multiplayer game built with [Next.js](https://nextjs.org/) and [Ably Realtime](https://ably.com/), using the Ably Pub/Sub model for WebSocket-like multiplayer functionality.
 
